@@ -25,6 +25,13 @@ export default class User extends Model {
                 type: GraphQLNonNull(GraphQLString),
                 email: true,
                 required: true,
+                lowercase: true,
+            },
+            password: {
+                password: true,
+                type: GraphQLString,
+                required: true,
+                minLength: 3,
             },
             firstName: {
                 type: GraphQLNonNull(GraphQLString)

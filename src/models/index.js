@@ -3,6 +3,7 @@ import ObjectID from '../lib/objectid'
 import {database} from "../config";
 import moment from 'moment'
 import _ from 'lodash'
+import bcrypt from 'bcrypt'
 
 export default class Model {
 
@@ -54,30 +55,71 @@ export default class Model {
      * @returns {Promise<any>}
      */
     async save(id = null, model) {
-
-        let isValid = false;
         let validateError = null;
 
+        const prefix = this.prefix();
+
+        const fields = this.fields();
+        let indexFields = [];
+        let uniqueFields = [];
+
+
         try {
-            isValid = await this.validate(id, model);
+            model = await this.validate(id, model);
         } catch (err) {
             validateError = err;
         }
 
-        console.log("Is valid", isValid, validateError);
+        console.log("Is valid", model, validateError);
 
         const db = this.getDataSource();
         id = id ? id : this.autoId();
         model.id = id;
 
+
+        _.each(fields, (fieldSetting, fieldName) => {
+            const isIndex = _.get(fieldSetting, 'index', false);
+            const fieldValue = _.get(model, fieldName);
+            const isUnique = _.get(fieldSetting, 'unique', false);
+            if (isIndex && fieldValue) {
+                // add to index
+                indexFields.push({name: fieldName, value: fieldValue});
+
+
+            }
+            if (isUnique && fieldValue) {
+                uniqueFields.push({name: fieldName, value: fieldValue});
+            }
+        });
+
+
+        const savePipeline = db.pipeline();
+
         return new Promise((resolve, reject) => {
 
+            if (validateError) {
+                return reject(validateError);
+            }
 
-            db.hmset(`${this.prefix()}:values:${id}`, model, (err) => {
-                // after create we do need add members to array
-                db.zadd(`${this.prefix()}:keys`, moment().unix(), id);
+            if (indexFields.length || uniqueFields.length) {
+
+                _.each(uniqueFields, (f) => {
+                    savePipeline.set(`${prefix}:unique:${f.name}:${f.value}`, id);
+
+                });
+                _.each(indexFields, (f) => {
+                    savePipeline.zadd(`${prefix}:index`, f.name, f.value);
+                })
+            }
+
+            // save model
+            savePipeline.hmset(`${prefix}:values:${id}`, model);
+            // add to collections keys for members list
+            savePipeline.zadd(`${prefix}:keys`, moment().unix(), id);
+
+            savePipeline.exec((err) => {
                 return err ? reject(err) : resolve(model);
-            });
+            })
         });
     }
 
@@ -87,35 +129,109 @@ export default class Model {
      * @param model
      * @returns {Promise<any>}
      */
-    validate(id = null, model) {
+    async validate(id = null, model) {
+
+        const db = this.getDataSource();
+        const prefix = this.prefix();
+        const fields = this.fields();
+        let data = {};
+        let error = [];
+        let passwordFields = [];
+        let uniqueFields = [];
+
+        _.each(fields, (fieldSettings, fieldName) => {
+            const isAutoId = _.get(fieldSettings, 'autoId', false);
+            const defaultValue = _.get(fieldSettings, 'defaultValue');
+            let fieldValue = _.get(model, fieldName, defaultValue);
+            const isEmailField = _.get(fieldSettings, 'email', false);
+            const isRequired = _.get(fieldSettings, 'required', false);
+            const isMinLength = _.get(fieldSettings, 'minLength', 0);
+            const isLowercase = _.get(fieldSettings, 'lowercase', false);
+            const isPassword = _.get(fieldSettings, 'password', false);
+            const isUnique = _.get(fieldSettings, 'unique', false);
+
+            if (isLowercase) {
+                fieldValue = _.toLower(fieldValue);
+            }
+            if (id !== null && !isPassword) {
+                error.push(`${fieldName} is required.`);
+            }
+            if (isPassword) {
+                passwordFields.push({name: fieldName, value: fieldValue});
+            }
+            if (isPassword && id === null && (!fieldValue || fieldValue === "" || fieldValue.length < isMinLength)) {
+                error.push(`${fieldName} must greater than ${isMinLength} characters.`);
+            }
+            if (isPassword && fieldValue && fieldValue !== "" && fieldValue.length >= isMinLength) {
+                fieldValue = bcrypt.hashSync(fieldValue, 10);
+            }
+            data = _.setWith(data, fieldName, fieldValue); // set field and value
+            if (isRequired && typeof fieldValue !== 'boolean' && !fieldValue) {
+                error.push(`${fieldName} is required`);
+            }
+            // if field is autoId, and is new then we remove id field.
+            if (!id && isAutoId) {
+                _.unset(data, fieldName);
+            }
+            if (isEmailField && fieldValue && !this.isEmail(fieldValue)) {
+                error.push(`${fieldName} must email valid`);
+            }
+
+            if (isUnique) {
+                uniqueFields.push({name: fieldName, value: fieldValue});
+            }
+        });
+
+        if (passwordFields.length && id) {
+            const originalModel = await this.get(id);
+            _.each(passwordFields, (field) => {
+                const originPassword = _.get(originalModel, field.name);
+                if (!field.value || field.value === "" || field.value === originPassword || bcrypt.compareSync(field.value, originPassword)) {
+                    data[field.name] = originPassword;
+                }
+
+            });
+        }
 
 
         return new Promise((resolve, reject) => {
 
-            const fields = this.fields();
-            let data = {};
-            let error = [];
-            _.each(fields, (fieldSettings, fieldName) => {
-                const isAutoId = _.get(fieldSettings, 'autoId', false);
-                const defaultValue = _.get(fieldSettings, 'defaultValue');
-                const fieldValue = _.get(model, fieldName, defaultValue);
-                const isEmailField = _.get(fieldSettings, 'email', false);
-                const isRequired = _.get(fieldSettings, 'required', false);
+            if (error.length) {
+                return reject(error);
+            }
+            if (uniqueFields.length) {
+                const uniquePipepline = db.pipeline();
+                let uniqueError = [];
 
-                data = _.setWith(data, fieldName, fieldValue); // set field and value
-                if (isRequired && typeof fieldValue !== 'boolean' && !_.get(model, fieldName)) {
-                    error.push(`${fieldName} is required`);
-                }
-                // if field is autoId, and is new then we remove id field.
-                if (!id && isAutoId) {
-                    _.unset(data, fieldName);
-                }
-                if (isEmailField && fieldValue && !this.isEmail(fieldValue)) {
-                    error.push(`${fieldName} must email valid`);
-                }
-                console.log(fieldSettings, fieldName);
-            });
-            return error.length ? reject(error) : resolve(data);
+                _.each(uniqueFields, (f) => {
+                    uniquePipepline.get(`${prefix}:unique:${f.name}:${f.value}`);
+                });
+
+
+                uniquePipepline.exec((err, result) => {
+
+                    if (err) {
+                        uniqueError.push(err);
+                    }
+
+                    _.each(result, (r, index) => {
+
+                        const errItem = _.get(r, '[0]');
+                        const isNotUniqueValue = _.get(r, '[1]');
+
+                        if (errItem !== null) {
+                            uniqueError.push(errItem);
+                        }
+                        if (isNotUniqueValue && id !== isNotUniqueValue) {
+                            uniqueError.push(`${uniqueFields[index].name} is already exist.`);
+                        }
+                    });
+                    return uniqueError.length ? reject(uniqueError) : resolve(data);
+                });
+            } else {
+                return resolve(data);
+            }
+
 
         });
     }
@@ -215,14 +331,15 @@ export default class Model {
             const prefix = this.prefix();
 
             // we also remove members from zadd
+            const pipline = db.pipeline();
+
             const args = [`${prefix}:keys`, id];
-            db.zrem(args, (err, result) => {
-                console.log("remove key with ", err, result);
+            pipline.zrem(args);
+            pipline.del(`${prefix}:values:${id}`);
+            pipline.exec((err) => {
+                return err ? reject(err) : resolve(id);
             });
 
-            db.del(`${prefix}:values:${id}`, (err, result) => {
-                console.log("Remove document", id, err, result);
-            })
         })
     }
 

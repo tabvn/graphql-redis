@@ -25,19 +25,10 @@ ctx.models.user.save(null, {
     password: "12345678",
     created: new Date()
 }).then((model) => {
-
     console.log("Model created", model);
+}).catch((err) => {
+    console.log("Unable save model", err);
 });
-ctx.models.user.find({limit: 50}).then((items) => {
-    //console.log("Items", items);
-});
-
-ctx.models.user.get('5aa64ce84c1cff1545bc7aa5');
-
-ctx.models.user.count().then((c) => {
-    console.log(c);
-});
-ctx.models.user.delete("5aa64ceff6c33f154bcd1ec9");
 
 app.server.listen(PORT, () => {
     console.log(`App is running on port ${app.server.address().port}`);
