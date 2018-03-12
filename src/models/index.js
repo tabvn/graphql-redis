@@ -55,6 +55,16 @@ export default class Model {
      * @returns {Promise<any>}
      */
     async save(id = null, model) {
+
+        let originalModel = null;
+
+        if (id) {
+            try {
+                originalModel = await this.get(id);
+            } catch (err) {
+                console.log(err);
+            }
+        }
         let validateError = null;
 
         const prefix = this.prefix();
@@ -70,24 +80,18 @@ export default class Model {
             validateError = err;
         }
 
-        console.log("Is valid", model, validateError);
 
         const db = this.getDataSource();
-        id = id ? id : this.autoId();
-        model.id = id;
-
 
         _.each(fields, (fieldSetting, fieldName) => {
             const isIndex = _.get(fieldSetting, 'index', false);
             const fieldValue = _.get(model, fieldName);
             const isUnique = _.get(fieldSetting, 'unique', false);
-            if (isIndex && fieldValue) {
+            if (isIndex) {
                 // add to index
                 indexFields.push({name: fieldName, value: fieldValue});
-
-
             }
-            if (isUnique && fieldValue) {
+            if (isUnique) {
                 uniqueFields.push({name: fieldName, value: fieldValue});
             }
         });
@@ -97,18 +101,44 @@ export default class Model {
 
         return new Promise((resolve, reject) => {
 
+
+            if (id && !originalModel) {
+
+                return reject("Model not found");
+            }
+
+
             if (validateError) {
                 return reject(validateError);
             }
 
+            id = id ? id : this.autoId();
+            model.id = id;
+
             if (indexFields.length || uniqueFields.length) {
 
                 _.each(uniqueFields, (f) => {
-                    savePipeline.set(`${prefix}:unique:${f.name}:${f.value}`, id);
+                    // let remove unique from original
+                    if (originalModel) {
+                        const originalValue = _.get(originalModel, f.name);
+                        savePipeline.del(`${prefix}:unique:${f.name}:${originalValue}`);
+                    }
+                    if (f.value) {
+                        savePipeline.set(`${prefix}:unique:${f.name}:${f.value}`, id);
+                    }
+
 
                 });
                 _.each(indexFields, (f) => {
-                    savePipeline.zadd(`${prefix}:index`, f.name, f.value);
+
+                    if (originalModel) {
+                        const originalValue = _.get(originalModel, f.name);
+                        savePipeline.zrem([`${prefix}:unique`, originalValue]);
+                    }
+                    if (f.value) {
+                        savePipeline.zadd(`${prefix}:index`, f.name, f.value);
+                    }
+
                 })
             }
 
@@ -153,9 +183,6 @@ export default class Model {
             if (isLowercase) {
                 fieldValue = _.toLower(fieldValue);
             }
-            if (id !== null && !isPassword) {
-                error.push(`${fieldName} is required.`);
-            }
             if (isPassword) {
                 passwordFields.push({name: fieldName, value: fieldValue});
             }
@@ -166,7 +193,8 @@ export default class Model {
                 fieldValue = bcrypt.hashSync(fieldValue, 10);
             }
             data = _.setWith(data, fieldName, fieldValue); // set field and value
-            if (isRequired && typeof fieldValue !== 'boolean' && !fieldValue) {
+
+            if (!isPassword && !id && isRequired && typeof fieldValue !== 'boolean' && !fieldValue) {
                 error.push(`${fieldName} is required`);
             }
             // if field is autoId, and is new then we remove id field.
@@ -176,7 +204,6 @@ export default class Model {
             if (isEmailField && fieldValue && !this.isEmail(fieldValue)) {
                 error.push(`${fieldName} must email valid`);
             }
-
             if (isUnique) {
                 uniqueFields.push({name: fieldName, value: fieldValue});
             }
@@ -192,7 +219,6 @@ export default class Model {
 
             });
         }
-
 
         return new Promise((resolve, reject) => {
 
@@ -232,7 +258,6 @@ export default class Model {
                 return resolve(data);
             }
 
-
         });
     }
 
@@ -246,7 +271,7 @@ export default class Model {
         const db = this.getDataSource();
         return new Promise((resolve, reject) => {
             db.hgetall(`${this.prefix()}:values:${id}`, (err, result) => {
-                return err ? reject(err) : resolve(result);
+                return err ? reject(err) : resolve(_.get(result, 'id') ? result : null);
             })
         });
     }
@@ -323,9 +348,38 @@ export default class Model {
      * @param id
      * @returns {Promise<any>}
      */
-    delete(id) {
+    async delete(id) {
+
+        const fields = this.fields();
+        let model = null;
+        try {
+            model = await this.get(id);
+        } catch (err) {
+            console.log(err);
+        }
+
+        let indexFields = [];
+        let uniqueFields = [];
+
+        _.each(fields, (fieldSetting, fieldName) => {
+            const isIndex = _.get(fieldSetting, 'index', false);
+            const isUnique = _.get(fieldSetting, 'unique', false);
+            const fieldValue = _.get(model, fieldName);
+            if (isIndex && fieldValue) {
+                // add to index
+                indexFields.push({name: fieldName, value: fieldValue});
+            }
+            if (isUnique && fieldValue) {
+                uniqueFields.push({name: fieldName, value: fieldValue});
+            }
+        });
+
 
         return new Promise((resolve, reject) => {
+
+            if (!model) {
+                return reject("Not found");
+            }
 
             const db = this.getDataSource();
             const prefix = this.prefix();
@@ -333,8 +387,15 @@ export default class Model {
             // we also remove members from zadd
             const pipline = db.pipeline();
 
-            const args = [`${prefix}:keys`, id];
-            pipline.zrem(args);
+            _.each(indexFields, (f) => {
+                pipline.zrem([`${prefix}:index:`, f.value]);
+            });
+
+            _.each(uniqueFields, (f) => {
+                pipline.del(`${prefix}:unique:${f.name}:${f.value}`);
+            });
+
+            pipline.zrem([`${prefix}:keys`, id]);
             pipline.del(`${prefix}:values:${id}`);
             pipline.exec((err) => {
                 return err ? reject(err) : resolve(id);

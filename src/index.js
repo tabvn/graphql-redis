@@ -18,17 +18,6 @@ const ctx = {
     models: database.models()
 };
 
-ctx.models.user.save(null, {
-    firstName: "Toan",
-    lastName: "Nguyen Dinh",
-    email: "toan@tabvn.com",
-    password: "12345678",
-    created: new Date()
-}).then((model) => {
-    console.log("Model created", model);
-}).catch((err) => {
-    console.log("Unable save model", err);
-});
 
 app.server.listen(PORT, () => {
     console.log(`App is running on port ${app.server.address().port}`);
