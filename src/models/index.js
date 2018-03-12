@@ -11,14 +11,26 @@ export default class Model {
         this.database = database;
     }
 
+    /**
+     * Return Redis for query
+     * @returns {*|number|Redis|IDBDatabase}
+     */
     getDataSource() {
         return this.database.db;
     }
 
+    /**
+     * Generate id
+     * @returns {*}
+     */
     autoId() {
         return new ObjectID().toString();
     }
 
+    /**
+     * Collection Prefix
+     * @returns {string}
+     */
     prefix() {
         return `${database.name}:${this.name}`;
     }
@@ -190,6 +202,11 @@ export default class Model {
         })
     }
 
+    /**
+     * Delete document from collection by Id
+     * @param id
+     * @returns {Promise<any>}
+     */
     delete(id) {
 
         return new Promise((resolve, reject) => {
@@ -209,6 +226,10 @@ export default class Model {
         })
     }
 
+    /**
+     * Field schema
+     * @returns {{id: {primary: boolean, index: boolean, autoId: boolean}}}
+     */
     fields() {
 
         return {

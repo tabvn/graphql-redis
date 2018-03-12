@@ -6,7 +6,10 @@ export default class User extends Model {
         super(database, 'users');
     }
 
-
+    /**
+     * Override field schema
+     * @returns {{id: {primary: boolean, index: boolean, autoId: boolean, type}, email: {unique: boolean, index: boolean, type, email: boolean, required: boolean}, firstName: {type}, lastName: {type}}}
+     */
     fields() {
 
         return {
