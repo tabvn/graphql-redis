@@ -75,7 +75,7 @@ export default class Token extends Model {
         })
     }
 
-    relations(){
+    relations() {
         return {
             user: {
                 type: 'belongTo',
@@ -86,6 +86,7 @@ export default class Token extends Model {
             }
         }
     }
+
     /**
      * Fields
      */
@@ -108,7 +109,7 @@ export default class Token extends Model {
             },
             created: {
                 type: DateTime,
-                defaultValue: new Date(),
+                defaultValue: new Date().toJSON(),
             },
         }
     }

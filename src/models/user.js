@@ -210,7 +210,7 @@ export default class User extends Model {
             },
             created: {
                 type: DateTime,
-                defaultValue: new Date(),
+                defaultValue: new Date().toJSON(),
             },
             updated: {
                 type: DateTime,
