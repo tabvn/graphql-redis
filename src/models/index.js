@@ -20,27 +20,6 @@ export default class Model {
 
     }
 
-    /**
-     * Add relation
-     * @param name
-     * @param id
-     * @param targetId
-     * @returns {Promise<any>}
-     */
-    addRelation(name, id, targetId) {
-
-        const db = this.getDataSource();
-
-        const prefix = this.prefix();
-
-        return new Promise((resolve, reject) => {
-            db.zadd(`${prefix}:relations:${name}:${id}`, moment().unix(), targetId, (err, result) => {
-                return err ? reject(err) : resolve(result);
-            });
-        })
-
-
-    }
 
     /**
      * Return Redis for query
@@ -112,7 +91,7 @@ export default class Model {
 
         const relations = this.relations();
 
-        let isNew = id ? false : true;
+        let isNew = !id;
 
         let originalModel = null;
 
@@ -388,6 +367,63 @@ export default class Model {
         });
     }
 
+
+    /**
+     * Find relation
+     * @param id
+     * @param relation
+     * @param filter
+     * @returns {Promise<any>}
+     */
+    findRelation(id, relation,filter){
+        const db = this.getDataSource();
+        const limit = _.get(filter, 'limit', 50);
+        const skip = _.get(filter, 'skip', 0);
+
+
+        return new Promise((resolve, reject) => {
+            const max = '+inf';
+            const min = '-inf';
+            const args = [`${this.prefix()}:relations:${relation.model.collection}:${id}`, max, min, 'LIMIT', skip, limit];
+
+            db.zrevrangebyscore(args, (err, result) => {
+                if (err) {
+                    return reject(err);
+                }
+
+                if (result && result.length) {
+
+                    let pipline = db.pipeline();
+                    let models = [];
+
+                    _.each((result), (key) => {
+                        pipline.hgetall(`${relation.model.prefix()}:values:${key}`);
+                    });
+
+                    pipline.exec((err, results) => {
+                        if (err) {
+                            return reject(err);
+                        }
+
+                        _.each(results, (v) => {
+                            const error = _.get(v, '[0]');
+                            if (error === null) {
+                                models.push(_.get(v, '[1]'));
+                            }
+                        });
+                        return resolve(models);
+                    });
+
+                } else {
+                    return resolve([]);
+                }
+
+            });
+        })
+
+
+
+    }
     /**
      * List documents in collection
      * @param filter
@@ -543,7 +579,7 @@ export default class Model {
 
         const name = this.modelName;
 
-        return {
+        const q = {
             [name]: {
                 type: this.schema(),
                 args: {
@@ -632,7 +668,59 @@ export default class Model {
                 }
             }
 
-        }
+        };
+
+
+        let relationsQuery = {};
+
+        _.each(this.relations(), (relation) => {
+
+            if(relation.type === 'hasMany'){
+                relationsQuery[`${this.modelName}_${relation.model.collection}`] = {
+                    type: new GraphQLList(relation.model.schema()),
+                    args: {
+                        id: {
+                          type: GraphQLNonNull(GraphQLID),
+                        },
+                        limit: {
+                            type: GraphQLInt,
+                            defaultValue: 50,
+                        },
+                        skip: {
+                            type: GraphQLInt,
+                            defaultValue: 0,
+                        },
+
+                    },
+                    resolve: async (value, args, request) => {
+
+
+                        return new Promise((resolve, reject) => {
+
+                            const filter = {
+                                limit: _.get(args, 'limit', 50),
+                                skip: _.get(args, 'skip', 0),
+                            };
+
+                            this.findRelation(_.get(args, 'id'), relation, filter).then((results) => {
+
+                                return resolve(results);
+                            }).catch((err) => {
+
+                                return reject(err);
+                            });
+
+                        });
+
+
+                    }
+                }
+            }
+
+        });
+
+
+        return Object.assign(q, relationsQuery);
     }
 
 

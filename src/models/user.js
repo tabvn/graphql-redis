@@ -170,7 +170,8 @@ export default class User extends Model {
                 model: this.database.models().token,
                 localField: 'id',
                 targetField: 'userId',
-                type: 'hasMany'
+                type: 'hasMany',
+                name: 'tokens',
             }
         }
     }
