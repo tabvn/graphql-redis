@@ -32,11 +32,19 @@ const handleRequest = graphqlHTTP(async (request) => {
         tokenId = _.get(request, 'query.auth', null);
     }
     request.ctx = ctx;
+
     let token = null;
+
+    try {
+        token = await ctx.models.token.verifyToken(tokenId);
+    } catch (err) {
+        console.log(err);
+    }
+    request.token = token;
 
     return {
         schema: new Schema(ctx).schema(),
-        graphiql: production ? false : true,
+        graphiql: !production,
     };
 });
 

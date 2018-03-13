@@ -8,15 +8,13 @@ import {GraphQLObjectType, GraphQLID, GraphQLNonNull, GraphQLList, GraphQLInt} f
 
 export default class Model {
 
-    constructor(database, name) {
-        this.name = name;
+    constructor(database, collection, modelName) {
+        this.collection = collection;
+        this.modelName = modelName;
         this.database = database;
         this._schema = null;
     }
 
-    getModelname() {
-        return this.name;
-    }
 
     /**
      * Return Redis for query
@@ -39,7 +37,7 @@ export default class Model {
      * @returns {string}
      */
     prefix() {
-        return `${database.name}:${this.name}`;
+        return `${database.name}:${this.collection}`;
     }
 
     /**
@@ -53,6 +51,29 @@ export default class Model {
         return regex.test(email);
     }
 
+    /**
+     * Before document is insert to collection
+     * @param model
+     * @returns {Promise<any>}
+     */
+    beforeCreate(model) {
+
+        return new Promise((resolve, reject) => {
+            return resolve(model);
+        });
+    }
+
+    /**
+     * Before document is save
+     * @param model
+     * @returns {Promise<any>}
+     */
+    beforeSave(model) {
+
+        return new Promise((resolve, reject) => {
+            return resolve(model);
+        });
+    }
 
     /**
      * Create or Update a document to collection
@@ -89,6 +110,18 @@ export default class Model {
 
         const db = this.getDataSource();
 
+        let hookError = null;
+
+        if (!validateError) {
+            try {
+                model = id ? await this.beforeSave(model) : await this.beforeCreate(model);
+            } catch (err) {
+                hookError = err;
+            }
+
+        }
+
+
         _.each(fields, (fieldSetting, fieldName) => {
             const isIndex = _.get(fieldSetting, 'index', false);
             const fieldValue = _.get(model, fieldName);
@@ -105,6 +138,7 @@ export default class Model {
 
         const savePipeline = db.pipeline();
 
+
         return new Promise((resolve, reject) => {
 
 
@@ -117,6 +151,12 @@ export default class Model {
             if (validateError) {
                 return reject(validateError);
             }
+
+            if (hookError !== null) {
+                return reject(hookError);
+            }
+            // invoke two hooks , before create and before save
+
 
             id = id ? id : this.autoId();
             model.id = id;
@@ -139,7 +179,7 @@ export default class Model {
 
                     if (originalModel) {
                         const originalValue = _.get(originalModel, f.name);
-                        savePipeline.zrem([`${prefix}:unique`, originalValue]);
+                        savePipeline.zrem([`${prefix}:index`, originalValue]);
                     }
                     if (f.value) {
                         savePipeline.zadd(`${prefix}:index`, f.name, f.value);
@@ -411,12 +451,13 @@ export default class Model {
     }
 
     /**
+     * Query for GraphQL
      * Queries
      * @returns {{}}
      */
     query() {
 
-        const name = this.getModelname();
+        const name = this.modelName;
 
         return {
             [name]: {
@@ -482,7 +523,7 @@ export default class Model {
             },
             [`count_${name}`]: {
                 type: new GraphQLObjectType({
-                    name: `${this.name}_count`,
+                    name: `${this.modelName}_count`,
                     fields: () => ({
                         count: {
                             type: GraphQLInt,
@@ -512,13 +553,13 @@ export default class Model {
 
 
     /**
-     * Mutations
+     * Mutations for GraphQL
      * @returns {{}}
      */
     mutation() {
 
         let fields = this.fields();
-        const name = this.getModelname();
+        const name = this.modelName;
         _.unset(fields, 'id');
 
         return {
@@ -595,8 +636,8 @@ export default class Model {
             return this._schema;
         }
         this._schema = new GraphQLObjectType({
-            name: this.getModelname(),
-            description: `${this.getModelname()}`,
+            name: this.modelName,
+            description: `${this.modelName}`,
             fields: () => (this.fields())
         });
 
@@ -616,6 +657,5 @@ export default class Model {
             }
         }
     }
-
 
 }
