@@ -4,12 +4,18 @@ import {database} from "../config";
 import moment from 'moment'
 import _ from 'lodash'
 import bcrypt from 'bcrypt'
+import {GraphQLObjectType, GraphQLID, GraphQLNonNull, GraphQLList, GraphQLInt} from 'graphql'
 
 export default class Model {
 
     constructor(database, name) {
         this.name = name;
         this.database = database;
+        this._schema = null;
+    }
+
+    getModelname() {
+        return this.name;
     }
 
     /**
@@ -405,18 +411,211 @@ export default class Model {
     }
 
     /**
-     * Field schema
-     * @returns {{id: {primary: boolean, index: boolean, autoId: boolean}}}
+     * Queries
+     * @returns {{}}
+     */
+    query() {
+
+        const name = this.getModelname();
+
+        return {
+            [name]: {
+                type: this.schema(),
+                args: {
+                    id: {
+                        type: GraphQLID
+                    }
+                },
+                resolve: async (value, args, request) => {
+
+                    const id = _.get(args, 'id');
+
+                    return new Promise((resolve, reject) => {
+
+                        this.get(id).then((model) => {
+                            return resolve(model);
+                        }).catch((err) => {
+                            return reject(err);
+                        })
+
+                    });
+
+
+                }
+            },
+            [`${name}s`]: {
+
+                type: new GraphQLList(this.schema()),
+                args: {
+                    limit: {
+                        type: GraphQLInt,
+                        defaultValue: 50,
+                    },
+                    skip: {
+                        type: GraphQLInt,
+                        defaultValue: 0,
+                    },
+
+                },
+                resolve: async (value, args, request) => {
+
+
+                    return new Promise((resolve, reject) => {
+
+                        const filter = {
+                            limit: _.get(args, 'limit', 50),
+                            skip: _.get(args, 'skip', 0),
+                        };
+
+                        this.find(filter).then((results) => {
+
+                            return resolve(results);
+                        }).catch((err) => {
+
+                            return reject(err);
+                        });
+
+                    });
+
+
+                }
+            },
+            [`count_${name}`]: {
+                type: new GraphQLObjectType({
+                    name: `${this.name}_count`,
+                    fields: () => ({
+                        count: {
+                            type: GraphQLInt,
+                            defaultValue: 0,
+                        }
+                    })
+                }),
+                args: {},
+                resolve: async (value, args, request) => {
+
+                    return new Promise((resolve, reject) => {
+
+                        this.count().then((num) => {
+                            return resolve({count: num});
+                        }).catch((err) => {
+                            return reject(err);
+                        });
+
+                    });
+
+
+                }
+            }
+
+        }
+    }
+
+
+    /**
+     * Mutations
+     * @returns {{}}
+     */
+    mutation() {
+
+        let fields = this.fields();
+        const name = this.getModelname();
+        _.unset(fields, 'id');
+
+        return {
+            [`create_${name}`]: {
+                type: this.schema(),
+                args: fields,
+                resolve: async (root, args, request) => {
+
+                    return new Promise((resolve, reject) => {
+                        this.save(null, args).then((model) => {
+                            return resolve(model)
+                        }).catch((err) => {
+                            return reject(err);
+                        })
+                    });
+
+                }
+            },
+            [`update_${name}`]: {
+
+                type: this.schema(),
+                args: this.fields(),
+                resolve: async (value, args, request) => {
+
+                    const id = _.get(args, 'id');
+
+                    return new Promise((resolve, reject) => {
+
+                        this.save(id, args).then((model) => {
+                            return resolve(model);
+                        }).catch((err) => {
+                            return reject(err);
+                        })
+                    });
+
+                }
+            },
+
+            [`delete_${name}`]: {
+                type: GraphQLID,
+                args: {
+                    id: {
+                        type: new GraphQLNonNull(GraphQLID)
+                    },
+                },
+                resolve: async (value, args, request) => {
+
+                    const id = _.get(args, 'id');
+
+                    return new Promise((resolve, reject) => {
+
+                        this.delete(id).then((data) => {
+                            return resolve(data);
+                        }).catch((err) => {
+                            return reject(err);
+                        });
+                    });
+
+
+                }
+            }
+
+        }
+    }
+
+
+    /**
+     * Schema
+     * @returns {null|GraphQLObjectType}
+     */
+    schema() {
+
+        if (this._schema) {
+            return this._schema;
+        }
+        this._schema = new GraphQLObjectType({
+            name: this.getModelname(),
+            description: `${this.getModelname()}`,
+            fields: () => (this.fields())
+        });
+
+        return this._schema;
+    }
+
+    /**
+     * Fields
      */
     fields() {
-
         return {
             id: {
                 primary: true,
                 index: true,
-                autoId: true
+                autoId: true,
+                type: GraphQLID
             }
         }
     }
+
 
 }

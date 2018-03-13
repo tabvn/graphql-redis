@@ -1,9 +1,13 @@
 import http from 'http'
 import express from 'express'
 import cors from 'cors'
-import Database from "./database";
+import Database from "./database"
+import graphqlHTTP from 'express-graphql'
+import Schema from './schema'
+import {production, port} from "./config"
+import _ from 'lodash'
 
-const PORT = 3001;
+const PORT = port;
 const app = express();
 app.server = http.createServer(app);
 
@@ -17,6 +21,27 @@ const ctx = {
     db: database,
     models: database.models()
 };
+
+
+app.ctx = ctx;
+
+const handleRequest = graphqlHTTP(async (request) => {
+
+    let tokenId = request.header('authorization');
+    if (!tokenId) {
+        tokenId = _.get(request, 'query.auth', null);
+    }
+    request.ctx = ctx;
+    let token = null;
+
+    return {
+        schema: new Schema(ctx).schema(),
+        graphiql: production ? false : true,
+    };
+});
+
+
+app.use('/api', handleRequest);
 
 
 app.server.listen(PORT, () => {
