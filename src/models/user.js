@@ -172,6 +172,7 @@ export default class User extends Model {
                 targetField: 'userId',
                 type: 'hasMany',
                 name: 'tokens',
+                delete: true,
             }
         }
     }

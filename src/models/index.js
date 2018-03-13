@@ -151,10 +151,8 @@ export default class Model {
 
         return new Promise((resolve, reject) => {
 
-
             if (id && !originalModel) {
-
-                return reject("Model not found");
+                isNew = true;
             }
 
 
@@ -375,7 +373,7 @@ export default class Model {
      * @param filter
      * @returns {Promise<any>}
      */
-    findRelation(id, relation,filter){
+    findRelation(id, relation, filter) {
         const db = this.getDataSource();
         const limit = _.get(filter, 'limit', 50);
         const skip = _.get(filter, 'skip', 0);
@@ -422,8 +420,8 @@ export default class Model {
         })
 
 
-
     }
+
     /**
      * List documents in collection
      * @param filter
@@ -491,6 +489,13 @@ export default class Model {
         })
     }
 
+    beforeDelete(model) {
+
+        return new Promise((resolve, reject) => {
+            return resolve(model);
+        })
+    }
+
     /**
      * Delete document from collection by Id
      * @param id
@@ -502,8 +507,13 @@ export default class Model {
 
         const fields = this.fields();
         let model = null;
+
         try {
             model = await this.get(id);
+            if (model) {
+                await this.beforeDelete(model);
+            }
+
         } catch (err) {
             console.log(err);
         }
@@ -549,15 +559,38 @@ export default class Model {
             pipline.del(`${prefix}:values:${id}`);
 
             // check relations and also remove relations as well.
+
+            let relationPipeline = db.pipeline();
+
             _.each(relations, (relation) => {
 
-                if (relation.type === 'belongTo') {
-                    const relationPrefix = relation.model.prefix();
-                    const targetFieldValue = _.get(model, relation.localField);
-                    pipline.zrem([`${relationPrefix}:relations:${this.collection}:${targetFieldValue}`, id]);
+                switch (relation.type) {
+                    case 'belongTo':
+
+                        const relationPrefix = relation.model.prefix();
+                        const targetFieldValue = _.get(model, relation.localField);
+                        pipline.zrem([`${relationPrefix}:relations:${this.collection}:${targetFieldValue}`, id]);
+
+                        break;
+
+                    case 'hasMany':
+
+                        if (relation.delete) {
+                            pipline.del(`${this.prefix()}:relations:${relation.model.collection}:${id}`);
+
+                        }
+
+
+                        break;
+
+
+                    default:
+
+                        break;
                 }
 
             });
+
             pipline.exec((err) => {
 
                 if (!err) {
@@ -675,12 +708,12 @@ export default class Model {
 
         _.each(this.relations(), (relation) => {
 
-            if(relation.type === 'hasMany'){
+            if (relation.type === 'hasMany') {
                 relationsQuery[`${this.modelName}_${relation.model.collection}`] = {
                     type: new GraphQLList(relation.model.schema()),
                     args: {
                         id: {
-                          type: GraphQLNonNull(GraphQLID),
+                            type: GraphQLNonNull(GraphQLID),
                         },
                         limit: {
                             type: GraphQLInt,
