@@ -21,6 +21,28 @@ export default class Model {
     }
 
     /**
+     * Add relation
+     * @param name
+     * @param id
+     * @param targetId
+     * @returns {Promise<any>}
+     */
+    addRelation(name, id, targetId) {
+
+        const db = this.getDataSource();
+
+        const prefix = this.prefix();
+
+        return new Promise((resolve, reject) => {
+            db.zadd(`${prefix}:relations:${name}:${id}`, moment().unix(), targetId, (err, result) => {
+                return err ? reject(err) : resolve(result);
+            });
+        })
+
+
+    }
+
+    /**
      * Return Redis for query
      * @returns {*|number|Redis|IDBDatabase}
      */
@@ -87,6 +109,8 @@ export default class Model {
      */
     async save(id = null, model) {
 
+
+        const relations = this.relations();
 
         let isNew = id ? false : true;
 
@@ -208,6 +232,31 @@ export default class Model {
 
                     this.event.emit(isNew ? 'create' : 'save', model);
                     this.event.emit(eventString, model);
+
+                    let relationPipeline = db.pipeline();
+                    _.each(relations, (relation) => {
+
+                        if (relation.type === 'belongTo') {
+                            const relationPrefix = relation.model.prefix();
+                            const targetFieldValue = _.get(model, relation.localField);
+
+                            if (originalModel) {
+                                const originalTargetValue = _.get(originalModel, relation.localField);
+                                // remove from relations
+                                relationPipeline.zrem([`${relationPrefix}:relations:${this.collection}:${originalTargetValue}`, id]);
+                            }
+                            if (targetFieldValue) {
+                                // add to relations
+                                relationPipeline.zadd(`${relationPrefix}:relations:${this.collection}:${targetFieldValue}`, moment().unix(), id);
+                            }
+
+                        }
+                    });
+
+                    // execute relations
+                    relationPipeline.exec((err) => {
+
+                    });
                 }
 
 
@@ -413,6 +462,8 @@ export default class Model {
      */
     async delete(id) {
 
+        const relations = this.relations();
+
         const fields = this.fields();
         let model = null;
         try {
@@ -460,6 +511,17 @@ export default class Model {
 
             pipline.zrem([`${prefix}:keys`, id]);
             pipline.del(`${prefix}:values:${id}`);
+
+            // check relations and also remove relations as well.
+            _.each(relations, (relation) => {
+
+                if (relation.type === 'belongTo') {
+                    const relationPrefix = relation.model.prefix();
+                    const targetFieldValue = _.get(model, relation.localField);
+                    pipline.zrem([`${relationPrefix}:relations:${this.collection}:${targetFieldValue}`, id]);
+                }
+
+            });
             pipline.exec((err) => {
 
                 if (!err) {
