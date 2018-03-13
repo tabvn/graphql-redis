@@ -41,7 +41,6 @@ export default class Token extends Model {
 
             db.get(args, (err, data) => {
 
-                console.log("Validate token ", err, data);
                 if (err || data === null) {
                     return reject('Not found');
                 }
@@ -76,6 +75,17 @@ export default class Token extends Model {
         })
     }
 
+    relations(){
+        return {
+            user: {
+                type: 'belongTo',
+                localField: 'userId',
+                targetField: 'id',
+                model: this.database.models().user,
+
+            }
+        }
+    }
     /**
      * Fields
      */

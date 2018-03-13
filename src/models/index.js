@@ -5,6 +5,9 @@ import moment from 'moment'
 import _ from 'lodash'
 import bcrypt from 'bcrypt'
 import {GraphQLObjectType, GraphQLID, GraphQLNonNull, GraphQLList, GraphQLInt} from 'graphql'
+import EventEmitter from 'events';
+
+const event = new EventEmitter();
 
 export default class Model {
 
@@ -13,8 +16,9 @@ export default class Model {
         this.modelName = modelName;
         this.database = database;
         this._schema = null;
-    }
+        this.event = event;
 
+    }
 
     /**
      * Return Redis for query
@@ -82,6 +86,9 @@ export default class Model {
      * @returns {Promise<any>}
      */
     async save(id = null, model) {
+
+
+        let isNew = id ? false : true;
 
         let originalModel = null;
 
@@ -194,6 +201,16 @@ export default class Model {
             savePipeline.zadd(`${prefix}:keys`, moment().unix(), id);
 
             savePipeline.exec((err) => {
+
+                if (!err) {
+                    // send event
+                    const eventString = isNew ? `${this.modelName}_create` : `${this.modelName}_save`;
+
+                    this.event.emit(isNew ? 'create' : 'save', model);
+                    this.event.emit(eventString, model);
+                }
+
+
                 return err ? reject(err) : resolve(model);
             })
         });
@@ -444,6 +461,11 @@ export default class Model {
             pipline.zrem([`${prefix}:keys`, id]);
             pipline.del(`${prefix}:values:${id}`);
             pipline.exec((err) => {
+
+                if (!err) {
+                    this.event.emit('delete', model);
+                    this.event.emit(`${this.modelName}_delete`, model);
+                }
                 return err ? reject(err) : resolve(id);
             });
 
@@ -625,6 +647,9 @@ export default class Model {
         }
     }
 
+    relations() {
+        return {};
+    }
 
     /**
      * Schema

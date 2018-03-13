@@ -163,6 +163,18 @@ export default class User extends Model {
         return Object.assign(parentMutation, mutation);
     }
 
+    relations() {
+
+        return {
+            tokens: {
+                model: this.database.models().token,
+                localField: 'id',
+                targetField: 'userId',
+                type: 'hasMany'
+            }
+        }
+    }
+
     /**
      * Override field schema
      */

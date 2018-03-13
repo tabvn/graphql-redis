@@ -35,11 +35,14 @@ const handleRequest = graphqlHTTP(async (request) => {
 
     let token = null;
 
-    try {
-        token = await ctx.models.token.verifyToken(tokenId);
-    } catch (err) {
-        console.log(err);
+    if (tokenId) {
+        try {
+            token = await ctx.models.token.verifyToken(tokenId);
+        } catch (err) {
+            console.log(err);
+        }
     }
+
     request.token = token;
 
     return {
@@ -47,7 +50,6 @@ const handleRequest = graphqlHTTP(async (request) => {
         graphiql: !production,
     };
 });
-
 
 app.use('/api', handleRequest);
 
