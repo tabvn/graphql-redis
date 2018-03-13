@@ -32,3 +32,6 @@ npm install
 ```
 npm run dev
 ```
+
+Video:
+https://www.youtube.com/watch?v=aTTRuBNVqqU
