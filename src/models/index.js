@@ -440,7 +440,7 @@ export default class Model {
         return new Promise((resolve, reject) => {
             const max = '+inf';
             const min = '-inf';
-            let args = limit ? [`${this.prefix()}:keys`, max, min, 'LIMIT', skip, limit]: [`${this.prefix()}:keys`, max, min];
+            let args = limit ? [`${this.prefix()}:keys`, max, min, 'LIMIT', skip, limit] : [`${this.prefix()}:keys`, max, min];
             db.zrevrangebyscore(args, (err, result) => {
                 if (err) {
                     return reject(err);
@@ -712,7 +712,7 @@ export default class Model {
         _.each(this.relations(), (relation) => {
 
             if (relation.type === 'hasMany') {
-                relationsQuery[`${this.modelName}_${relation.model.collection}`] = {
+                relationsQuery[`${this.modelName}__${relation.model.collection}`] = {
                     type: new GraphQLList(relation.model.schema()),
                     args: {
                         id: {
