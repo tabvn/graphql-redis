@@ -168,6 +168,9 @@ export default class Model {
 
             id = id ? id : this.autoId();
             model.id = id;
+            if (!isNew && !_.get(model, 'updated') && _.get(fields, 'updated')) {
+                model.updated = new Date().toJSON();
+            }
 
             if (indexFields.length || uniqueFields.length) {
 
@@ -281,6 +284,7 @@ export default class Model {
             if (isPassword && fieldValue && fieldValue !== "" && fieldValue.length >= isMinLength) {
                 fieldValue = bcrypt.hashSync(fieldValue, 10);
             }
+
             data = _.setWith(data, fieldName, fieldValue); // set field and value
 
             if (!isPassword && !id && isRequired && typeof fieldValue !== 'boolean' && !fieldValue) {
@@ -430,14 +434,13 @@ export default class Model {
     find(filter = null) {
 
         const db = this.getDataSource();
-        const limit = _.get(filter, 'limit', 50);
+        const limit = _.get(filter, 'limit', null);
         const skip = _.get(filter, 'skip', 0);
 
         return new Promise((resolve, reject) => {
             const max = '+inf';
             const min = '-inf';
-            const args = [`${this.prefix()}:keys`, max, min, 'LIMIT', skip, limit];
-
+            let args = limit ? [`${this.prefix()}:keys`, max, min, 'LIMIT', skip, limit]: [`${this.prefix()}:keys`, max, min];
             db.zrevrangebyscore(args, (err, result) => {
                 if (err) {
                     return reject(err);
@@ -643,7 +646,7 @@ export default class Model {
                 args: {
                     limit: {
                         type: GraphQLInt,
-                        defaultValue: 50,
+                        defaultValue: 0,
                     },
                     skip: {
                         type: GraphQLInt,
@@ -657,7 +660,7 @@ export default class Model {
                     return new Promise((resolve, reject) => {
 
                         const filter = {
-                            limit: _.get(args, 'limit', 50),
+                            limit: _.get(args, 'limit', 0),
                             skip: _.get(args, 'skip', 0),
                         };
 

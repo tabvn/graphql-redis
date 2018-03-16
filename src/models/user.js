@@ -2,12 +2,60 @@ import Model from "./index";
 import {GraphQLString, GraphQLNonNull, GraphQLID, GraphQLObjectType, GraphQLBoolean} from 'graphql'
 import Email from '../types/email'
 import DateTime from '../types/datetime'
+import Role from '../types/role'
 import bcrypt from 'bcrypt'
+import {SEP} from "../types/role";
 import _ from 'lodash'
 
 export default class User extends Model {
     constructor(database) {
         super(database, 'users', 'user');
+    }
+
+
+    /**
+     * Override validate
+     * @param id
+     * @param model
+     * @returns {Promise<any>}
+     */
+    async validate(id, model) {
+
+        let error = [];
+
+        const roleModels = await this.database.models().role.find(null);
+        try {
+            model = await super.validate(id, model);
+        }
+        catch (err) {
+            err.push(err);
+        }
+
+
+        return new Promise((resolve, reject) => {
+            if (error.length) {
+                return reject(error);
+            }
+
+
+            let roles = [];
+
+            _.each(roleModels, (r) => {
+                roles.push(r.name);
+            });
+
+            const userRoles = _.split(_.get(model, 'roles'), SEP);
+            _.each(userRoles, (r) => {
+                if (!_.includes(roles, r)) {
+                    error.push(`Role name: ${r} does not exist.`);
+                }
+            });
+
+            return error.length ? reject(error) : resolve(model);
+
+
+        });
+
     }
 
     /**
@@ -196,6 +244,9 @@ export default class User extends Model {
                 email: true,
                 required: true,
                 lowercase: true,
+            },
+            roles: {
+                type: Role,
             },
             password: {
                 password: true,
