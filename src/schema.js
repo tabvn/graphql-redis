@@ -4,8 +4,6 @@ import {
 } from 'graphql';
 
 import _ from 'lodash'
-import {production} from "./config";
-import graphqlHTTP from "express-graphql";
 
 export default class Schema {
 

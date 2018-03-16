@@ -1,31 +1,27 @@
 import http from 'http'
-import express from 'express'
 import cors from 'cors'
-import Database from "./database"
 import graphqlHTTP from 'express-graphql'
 import Schema from './schema'
 import {production, port} from "./config"
 import _ from 'lodash'
 
 const PORT = port;
-const app = express();
-app.server = http.createServer(app);
+import Context from "./context";
 
+const {app, database, pubSub, server} = new Context();
+
+app.server = server;
 app.use(cors({
     exposedHeaders: "*"
 }));
 
-const database = new Database();
 
 const ctx = {
-    db: database,
-    models: database.models()
+    pubSub: pubSub,
+    models: database.models(),
 };
 
-
-app.ctx = ctx;
-
-const handleRequest = graphqlHTTP(async (request) => {
+app.use('/api', graphqlHTTP(async (request) => {
 
     let tokenId = request.header('authorization');
     if (!tokenId) {
@@ -42,16 +38,12 @@ const handleRequest = graphqlHTTP(async (request) => {
             console.log(err);
         }
     }
-
     request.token = token;
-
     return {
         schema: new Schema(ctx).schema(),
         graphiql: !production,
     };
-});
-
-app.use('/api', handleRequest);
+}));
 
 
 app.server.listen(PORT, () => {
