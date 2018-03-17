@@ -10,12 +10,14 @@ export default new GraphQLScalarType({
     description: 'Use JavaScript Date object for date/tiem fields.',
 
     serialize(value) {
-        const date = moment(value);
-        const isValid = !date.isValid()
-        if (value && isValid) {
+
+        let date = moment(value);
+
+        const isValid = date.isValid();
+        if (value && !isValid) {
             throw new TypeError(`Value is not a valid Date: ${value}`);
         }
-        return isValid ? date.toJSON() : value;
+        return isValid ? date.toString() : value;
     },
 
     parseValue(value) {
