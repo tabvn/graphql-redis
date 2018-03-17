@@ -97,6 +97,12 @@ export default class PubSub {
 
     }
 
+    /**
+     * Authenticate client
+     * @param token
+     * @param clientId
+     * @returns {Promise<void>}
+     */
     async authenticate(token, clientId){
 
         let decoded = null;
@@ -125,13 +131,28 @@ export default class PubSub {
         }
     }
 
+    /**
+     * Get topic by name
+     * @param name
+     * @returns {V | undefined}
+     */
     getTopic(name){
 
 
         return this._topics.get(name);
     }
-    createTopic(name, userId = null, permissions = []){
-        
+
+    /**
+     * Create topic
+     * @param name
+     * @param clientId
+     * @param permissions
+     * @returns {Promise<any>}
+     */
+    createTopic(name, clientId = null, permissions = []){
+
+        const client = this.getClient(clientId);
+        const userId = _.get(client, 'user.id', null);
 
         return new Promise((resolve, reject) => {
             const topic = new Topic(name, userId, permissions);
