@@ -110,6 +110,16 @@ export default class Model {
         let indexFields = [];
         let uniqueFields = [];
 
+        let changed = false;
+        _.each(fields, (fieldSetting, fieldName) => {
+
+            if (originalModel && typeof model[fieldName] === 'undefined') {
+                model[fieldName] = _.get(originalModel, fieldName);
+            }
+            if (isNew && originalModel && typeof model[fieldName] !== 'undefined' && _.get(model, fieldName) !== _.get(originalModel, fieldName)) {
+                changed = true;
+            }
+        });
 
         try {
             model = await this.validate(id, model);
@@ -143,6 +153,8 @@ export default class Model {
             if (isUnique) {
                 uniqueFields.push({name: fieldName, value: fieldValue});
             }
+
+
         });
 
 
@@ -168,6 +180,13 @@ export default class Model {
 
             id = id ? id : this.autoId();
             model.id = id;
+
+
+            if (!changed) {
+                // we dont do anything. because no thing change.
+                return resolve(model);
+            }
+
             if (!isNew && !_.get(model, 'updated') && _.get(fields, 'updated')) {
                 model.updated = new Date().toJSON();
             }

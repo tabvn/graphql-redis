@@ -4,6 +4,7 @@ import EventEmitter from 'events'
 import ObjectID from '../lib/objectid'
 import _ from 'lodash'
 import Topic from './topic'
+
 export default class PubSub {
 
     constructor(wss, database) {
@@ -18,7 +19,6 @@ export default class PubSub {
         wss.on('connection', (ws) => {
 
             console.log("new client connected");
-
 
             const clientId = new ObjectID();
 
@@ -40,8 +40,6 @@ export default class PubSub {
             ws.on('message', (message) => {
 
 
-
-
                 if (typeof message === 'string') {
                     message = this.toJson(message);
 
@@ -49,20 +47,20 @@ export default class PubSub {
                     const payload = _.get(message, 'payload');
                     const id = _.get(message, 'id');
 
-                      //confirm we received this message
-                      ws.send(JSON.stringify({
-                            action: '__reply__',
-                            payload: id,
-                      }));
+                    //confirm we received this message
+                    ws.send(JSON.stringify({
+                        action: '__reply__',
+                        payload: id,
+                    }));
 
-                    switch(action){
+                    switch (action) {
 
                         case 'auth':
-                                this.authenticate(payload, clientId);
+                            this.authenticate(payload, clientId);
                             break;
 
                         case 'topic':
-                                this.createTopic(payload, clientId);
+                            this.createTopic(payload, clientId);
 
                             break;
 
@@ -82,15 +80,11 @@ export default class PubSub {
                     this.sub('test_' + clientId, clientId);
 
 
-
                     this.pub('test_' + clientId, message);
                 });
-                
+
 
             });
-
-
-           
 
 
         });
@@ -103,28 +97,28 @@ export default class PubSub {
      * @param clientId
      * @returns {Promise<void>}
      */
-    async authenticate(token, clientId){
+    async authenticate(token, clientId) {
 
         let decoded = null;
         let user = null;
 
-        try{
-             decoded = await this._db.models().token.verifyToken(token);
+        try {
+            decoded = await this._db.models().token.verifyToken(token);
         }
-        catch(err){
+        catch (err) {
             console.log(err);
         }
-        if(decoded){
+        if (decoded) {
             const userId = _.get(decoded, 'userId');
 
-            try{
+            try {
                 user = await this._db.models().user.get(userId);
             }
-            catch(err){
+            catch (err) {
                 console.log(err);
             }
             let client = this.getClient(clientId);
-            if(client){
+            if (client) {
                 client.user = user;
                 this.addClient(clientId, client);
             }
@@ -136,7 +130,7 @@ export default class PubSub {
      * @param name
      * @returns {V | undefined}
      */
-    getTopic(name){
+    getTopic(name) {
 
 
         return this._topics.get(name);
@@ -149,7 +143,7 @@ export default class PubSub {
      * @param permissions
      * @returns {Promise<any>}
      */
-    createTopic(name, clientId = null, permissions = []){
+    createTopic(name, clientId = null, permissions = []) {
 
         const client = this.getClient(clientId);
         const userId = _.get(client, 'user.id', null);
@@ -201,10 +195,10 @@ export default class PubSub {
     pub(topicName, data) {
 
         const topic = this.getTopic(topicName);
-        if(topic){
+        if (topic) {
             this._pubSubEvent.emit(topicName, data);
         }
-        
+
     }
 
     /**
@@ -214,22 +208,19 @@ export default class PubSub {
      */
     sub(topicName, clientId) {
 
-        
+
         const topic = this.getTopic(topicName);
 
-        
 
+        if (topic) {
 
-        if(topic){
-
-             let listener = this.getListenerFunc(topicName, clientId);
+            let listener = this.getListenerFunc(topicName, clientId);
             if (listener) {
                 return;
             }
 
             listener = (data) => {
 
-                
 
                 this.sendMessageToClient(clientId, {
                     action: 'sub_message',
@@ -244,14 +235,12 @@ export default class PubSub {
             const client = this.getClient(clientId);
             const isAllow = topic.checkAccess(_.get(client, 'user'));
 
-            if(isAllow){
-                 this.setListenerFunc(topic, clientId, listener);
-                 this._pubSubEvent.on(topicName, listener);
+            if (isAllow) {
+                this.setListenerFunc(topic, clientId, listener);
+                this._pubSubEvent.on(topicName, listener);
             }
-           
-        }
 
-       
+        }
 
 
     }
@@ -291,8 +280,8 @@ export default class PubSub {
         }
         // remove listener
         listeners.forEach((v, k) => {
-        
-        
+
+
             this.unSub(v.topic, clientId);
         });
 

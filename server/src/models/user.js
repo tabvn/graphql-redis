@@ -12,19 +12,24 @@ export default class User extends Model {
         super(database, 'users', 'user');
     }
 
-    async get(id){
+    async get(id) {
 
         let model = null;
 
-        try{
+        try {
             model = await super.get(id);
-        }catch(err){
+        } catch (err) {
             console.log(err);
         }
 
-        if(model){
+        if (model) {
 
-            model.roles = _.split(_.get(model, 'roles'), SEP);
+            if (_.get(model, 'roles')) {
+                model.roles = _.split(_.get(model, 'roles'), SEP);
+            } else {
+                model.roles = [];
+            }
+
         }
         return new Promise((resolve, reject) => {
 
@@ -64,12 +69,22 @@ export default class User extends Model {
                 roles.push(r.name);
             });
 
-            const userRoles = _.split(_.get(model, 'roles'), SEP);
+            const uRoles = _.get(model, 'roles', []);
+            let userRoles = _.split(uRoles, SEP);
+
+            if (Array.isArray(_.get(model, 'roles'))) {
+                userRoles = uRoles;
+                model.roles = _.join(uRoles, SEP);
+            }
+            if (!userRoles.length) {
+                return resolve(model);
+            }
             _.each(userRoles, (r) => {
                 if (!_.includes(roles, r)) {
                     error.push(`Role name: ${r} does not exist.`);
                 }
             });
+
 
             return error.length ? reject(error) : resolve(model);
 

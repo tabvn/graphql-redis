@@ -11,7 +11,11 @@ const strToArray = (str) => {
     const arr = _.split(str, SEP);
 
     _.each(arr, (ar) => {
-        v.push(_.toLower(_.trim(ar)));
+        const value = _.toLower(_.trim(ar));
+        if (value && value !== "") {
+            v.push();
+        }
+
     });
 
     v = _.uniq(v);
