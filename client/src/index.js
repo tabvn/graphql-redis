@@ -198,15 +198,12 @@ window.onload = (function () {
     conn.connect().then(() => {
         console.log("Client is connected");
     }).catch(err => {
-
         console.log("An error connecting", err);
     });
 
     conn.on('connected', () => {
         console.log("you are connected");
-
         conn.createTopic('toan').then(() => {
-
             console.log("Your topic has created");
         });
     })
