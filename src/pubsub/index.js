@@ -2,6 +2,7 @@ import {Map} from 'immutable'
 import EventEmitter from 'events'
 import ObjectID from '../lib/objectid'
 import _ from 'lodash'
+import Topic from './topic'
 
 export default class PubSub {
 
@@ -21,9 +22,7 @@ export default class PubSub {
 
             const client = {
                 id: clientId,
-                userId: null,
-                authenticated: false,
-                subs: new Map(),
+                user: null,
                 ws: ws,
             };
 
@@ -38,25 +37,52 @@ export default class PubSub {
 
             ws.on('message', (message) => {
 
+
                 if (typeof message === 'string') {
                     message = this.toJson(message);
-                    console.log(`Message from Client ${clientId}`, message);
+                    console.log(`Message from Client ${clientId}`, message, this._clients.size);
 
                 } else {
                     // handle data message later.
                 }
 
                 message = _.setWith(message, '_ID', clientId);
-                this.pub('test_' + clientId, message);
+
+                this.createTopic('test_' + clientId).then(() => {
+
+                    this.sub('test_' + clientId, clientId);
+
+
+
+                    this.pub('test_' + clientId, message);
+                });
+                
 
             });
 
 
-            this.sub('test_' + clientId, clientId);
+           
 
 
         });
 
+    }
+
+
+    getTopic(name){
+
+
+        return this._topics.get(name);
+    }
+    createTopic(name, userId = null, permissions = []){
+        
+
+        return new Promise((resolve, reject) => {
+            const topic = new Topic(name, userId, permissions);
+            this._topics = this._topics.set(name, topic);
+
+            return resolve(topic);
+        });
     }
 
     /**
@@ -96,10 +122,13 @@ export default class PubSub {
      * @param topic
      * @param data
      */
-    pub(topic, data) {
+    pub(topicName, data) {
 
-        this._topics = this._topics.set(topic, true);
-        this._pubSubEvent.emit(topic, data);
+        const topic = this.getTopic(topicName);
+        if(topic){
+            this._pubSubEvent.emit(topicName, data);
+        }
+        
     }
 
     /**
@@ -107,29 +136,46 @@ export default class PubSub {
      * @param topic
      * @param clientId
      */
-    sub(topic, clientId) {
+    sub(topicName, clientId) {
 
-        this._topics = this._topics.set(topic, true);
+        
+        const topic = this.getTopic(topicName);
 
-        let listener = this.getListenerFunc(topic, clientId);
-        if (listener) {
-            return;
+        
+
+
+        if(topic){
+
+             let listener = this.getListenerFunc(topicName, clientId);
+            if (listener) {
+                return;
+            }
+
+            listener = (data) => {
+
+                console.log("receive ", clientId, data);
+
+                this.sendMessageToClient(clientId, {
+                    action: 'sub_message',
+                    payload: {
+                        topic: topicName,
+                        data: data,
+                    },
+                })
+            };
+
+            // check permission before add to subscriber list
+            const client = this.getClient(clientId);
+            const isAllow = topic.checkAccess(_.get(client, 'user'));
+
+            if(isAllow){
+                 this.setListenerFunc(topic, clientId, listener);
+                 this._pubSubEvent.on(topicName, listener);
+            }
+           
         }
 
-        listener = (data) => {
-
-            console.log("receive ", clientId, data);
-
-            this.sendMessageToClient(clientId, {
-                action: 'sub_message',
-                payload: {
-                    topic: topic,
-                    data: data,
-                },
-            })
-        };
-        this.setListenerFunc(topic, clientId, listener);
-        this._pubSubEvent.on(topic, listener);
+       
 
 
     }
@@ -139,12 +185,12 @@ export default class PubSub {
      * @param topic
      * @param clientId
      */
-    unSub(topic, clientId) {
+    unSub(topicName, clientId) {
 
-        const listener = this.getListenerFunc(topic, clientId);
+        const listener = this.getListenerFunc(topicName, clientId);
 
         if (listener) {
-            this._pubSubEvent.removeListener(topic, listener);
+            this._pubSubEvent.removeListener(topicName, listener);
         }
 
     }

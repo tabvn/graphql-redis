@@ -5,13 +5,20 @@ let connected = false;
 
 let event = new EventEmitter();
 
+let count = 0;
+let error = 0;
+
+
 const connect = () => {
     const ws = new WebSocket('ws://localhost:3001');
 
     ws.on('open', () => {
-        console.log("Connected to the server");
+
+        count = count +1;
+
+        console.log("Connected to the server: ", count);
         ws.on('message', (msg) => {
-            console.log("Got message from the server", msg, new Date());
+           // console.log("Got message from the server", msg, new Date());
 
         });
 
@@ -33,20 +40,30 @@ const connect = () => {
 
     });
 
+
     ws.on('close', () => {
-        console.log("error");
+        error = error +1;
+        count = count -1;
+        console.log("error", error, count);
         event.emit('disconnect', true);
     });
 
     ws.on('error', () => {
-        console.log("An error connecting to server")
+        error = error +1;
+        console.log("An error connecting to server", error);
+
         event.emit('disconnect', true);
     });
 
 }
 
-connect();
+setInterval(() => {
+
+     connect();
+}, 100)
+
+
 
 event.on('disconnect', () => {
-    connect();
+   // connect();
 })
