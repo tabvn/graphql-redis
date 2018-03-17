@@ -189,7 +189,9 @@ export default class Connection {
     }
 }
 
-
+/**
+ * Test Only, remove this when build the library
+ */
 window.onload = (function () {
 
     const conn = new Connection('ws://localhost:3001/');
