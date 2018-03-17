@@ -12,6 +12,26 @@ export default class User extends Model {
         super(database, 'users', 'user');
     }
 
+    async get(id){
+
+        let model = null;
+
+        try{
+            model = await super.get(id);
+        }catch(err){
+            console.log(err);
+        }
+
+        if(model){
+
+            model.roles = _.split(_.get(model, 'roles'), SEP);
+        }
+        return new Promise((resolve, reject) => {
+
+            return model ? resolve(model) : reject('Not found');
+        });
+
+    }
 
     /**
      * Override validate

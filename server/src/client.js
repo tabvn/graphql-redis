@@ -23,13 +23,20 @@ const connect = () => {
         });
 
 
+
         ws.send(JSON.stringify({
+            action: 'auth',
+            payload:  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiI1YWFiM2QzZDIzMDUzMDA1NjQ2N2JlNTciLCJpYXQiOjE1MjEyNTY4MDR9.zS5Udnq3JhqrcJWjtOSDfTT3cdZgdHrDoiSmo3hq9hc",
+        }));
+
+
+           ws.send(JSON.stringify({
             action: 'pub',
             payload: {
                 topic: 'tabvn:users:abc',
                 data: {user: '1', email: "toan@tabvn.com"}
             }
-        }))
+        }));
 
 
         setInterval(() => {
@@ -57,13 +64,11 @@ const connect = () => {
 
 }
 
-setInterval(() => {
 
-     connect();
-}, 100)
+ connect();
 
 
 
 event.on('disconnect', () => {
-   // connect();
+   connect();
 })

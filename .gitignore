@@ -1,5 +1,9 @@
-/.idea
-/node_modules
-/dist
-/package-lock.json
-/dump.rdb
+.idea
+/server/node_modules
+/server/dist
+/server/package-lock.json
+/server/dump.rdb
+
+/client/node_modules
+/client/package-lock.json
+/client/dist

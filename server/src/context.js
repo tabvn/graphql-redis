@@ -13,7 +13,7 @@ const wss = new WebSocketServer.Server({
 
 
 
-const pubSub = new PubSub(wss);
+const pubSub = new PubSub(wss, database);
 
 export default class Context {
     constructor() {

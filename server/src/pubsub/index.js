@@ -1,13 +1,15 @@
+import "babel-polyfill"
 import {Map} from 'immutable'
 import EventEmitter from 'events'
 import ObjectID from '../lib/objectid'
 import _ from 'lodash'
 import Topic from './topic'
-
 export default class PubSub {
 
-    constructor(wss) {
+    constructor(wss, database) {
 
+        this._wss = wss;
+        this._db = database;
         this._topics = new Map();
         this._clients = new Map();
         this._pubSubEvent = new EventEmitter();
@@ -38,8 +40,35 @@ export default class PubSub {
             ws.on('message', (message) => {
 
 
+
+
                 if (typeof message === 'string') {
                     message = this.toJson(message);
+
+                    const action = _.get(message, 'action');
+                    const payload = _.get(message, 'payload');
+                    const id = _.get(message, 'id');
+
+                      //confirm we received this message
+                      ws.send(JSON.stringify({
+                            action: '__reply__',
+                            payload: id,
+                      }));
+
+                    switch(action){
+
+                        case 'auth':
+                                this.authenticate(payload, clientId);
+                            break;
+
+                        case 'topic':
+                                this.createTopic(payload, clientId);
+
+                            break;
+
+                        default:
+                            break;
+                    }
                     console.log(`Message from Client ${clientId}`, message, this._clients.size);
 
                 } else {
@@ -68,6 +97,33 @@ export default class PubSub {
 
     }
 
+    async authenticate(token, clientId){
+
+        let decoded = null;
+        let user = null;
+
+        try{
+             decoded = await this._db.models().token.verifyToken(token);
+        }
+        catch(err){
+            console.log(err);
+        }
+        if(decoded){
+            const userId = _.get(decoded, 'userId');
+
+            try{
+                user = await this._db.models().user.get(userId);
+            }
+            catch(err){
+                console.log(err);
+            }
+            let client = this.getClient(clientId);
+            if(client){
+                client.user = user;
+                this.addClient(clientId, client);
+            }
+        }
+    }
 
     getTopic(name){
 
@@ -80,7 +136,6 @@ export default class PubSub {
         return new Promise((resolve, reject) => {
             const topic = new Topic(name, userId, permissions);
             this._topics = this._topics.set(name, topic);
-
             return resolve(topic);
         });
     }
@@ -153,7 +208,7 @@ export default class PubSub {
 
             listener = (data) => {
 
-                console.log("receive ", clientId, data);
+                
 
                 this.sendMessageToClient(clientId, {
                     action: 'sub_message',
@@ -215,7 +270,8 @@ export default class PubSub {
         }
         // remove listener
         listeners.forEach((v, k) => {
-            console.log("Begin unsc", v);
+        
+        
             this.unSub(v.topic, clientId);
         });
 
