@@ -4,12 +4,12 @@ import EventEmitter from 'events'
 import ObjectID from '../lib/objectid'
 import _ from 'lodash'
 import Topic from './topic'
+import Client from "./client";
 
 export default class PubSub {
 
     constructor(wss, database) {
 
-        this._wss = wss;
         this._db = database;
         this._topics = new Map();
         this._clients = new Map();
@@ -22,30 +22,34 @@ export default class PubSub {
 
             const clientId = new ObjectID();
 
-            const client = {
+            const client = new Client({
                 id: clientId,
                 user: null,
                 ws: ws,
-            };
+            });
 
             // save client to the list
-            this.addClient(clientId, client);
+            this.addClient(client);
 
             ws.on('close', () => {
                 console.log("Client disconnected");
+                client.disconnect();
                 this.removeClient(clientId);
             });
 
 
-            ws.on('message', (message) => {
+            ws.on('message', (data) => {
 
 
-                if (typeof message === 'string') {
-                    message = this.toJson(message);
+                if (typeof data === 'string') {
 
+                    const message = this.toJson(data);
                     const action = _.get(message, 'action');
                     const payload = _.get(message, 'payload');
                     const id = _.get(message, 'id');
+
+
+                    console.log("Client message:", message);
 
                     //confirm we received this message
                     ws.send(JSON.stringify({
@@ -53,35 +57,39 @@ export default class PubSub {
                         payload: id,
                     }));
 
+
                     switch (action) {
 
                         case 'auth':
                             this.authenticate(payload, clientId);
                             break;
 
-                        case 'topic':
+                        case 'topic_create':
+
+                            console.log('G', payload);
                             this.createTopic(payload, clientId);
 
                             break;
 
+                        case 'topic_publish':
+                            this.topicPublishMessage(payload);
+
+                            break;
+
+                        case 'topic_subscribe':
+
+                            this.topicSubscribe(payload, clientId);
+
+                            break;
+
+
                         default:
                             break;
                     }
-                    console.log(`Message from Client ${clientId}`, message, this._clients.size);
 
                 } else {
                     // handle data message later.
                 }
-
-                message = _.setWith(message, '_ID', clientId);
-
-                this.createTopic('test_' + clientId).then(() => {
-
-                    this.sub('test_' + clientId, clientId);
-
-
-                    this.pub('test_' + clientId, message);
-                });
 
 
             });
@@ -89,6 +97,15 @@ export default class PubSub {
 
         });
 
+    }
+
+    /**
+     * Auto ID
+     * @returns {*}
+     */
+
+    autoId() {
+        return new ObjectID().toString();
     }
 
     /**
@@ -120,7 +137,7 @@ export default class PubSub {
             let client = this.getClient(clientId);
             if (client) {
                 client.user = user;
-                this.addClient(clientId, client);
+                this.addClient(client);
             }
         }
     }
@@ -131,9 +148,40 @@ export default class PubSub {
      * @returns {V | undefined}
      */
     getTopic(name) {
-
-
         return this._topics.get(name);
+    }
+
+
+    /**
+     * Publish message to topic
+     * @param payload
+     */
+
+    topicPublishMessage(payload) {
+
+        const name = _.get(payload, 'name');
+        const topic = this.getTopic(name);
+
+        if (topic) {
+            topic.publish(_.get(payload, 'data'));
+        }
+
+    }
+
+    /**
+     * Subscribe client to topic
+     * @param payload
+     * @param clientId
+     */
+    topicSubscribe(payload, clientId) {
+        const name = _.get(payload, 'name');
+        const topic = this.getTopic(name);
+        const client = this.getClient(clientId);
+        if (topic && client) {
+            topic.subscribe(client);
+        }
+
+
     }
 
     /**
@@ -143,16 +191,14 @@ export default class PubSub {
      * @param permissions
      * @returns {Promise<any>}
      */
-    createTopic(name, clientId = null, permissions = []) {
+    createTopic(payload, clientId) {
 
         const client = this.getClient(clientId);
-        const userId = _.get(client, 'user.id', null);
+        const topic = new Topic(payload, client);
+        const topicName = _.get(payload, 'name');
+        this._topics = this._topics.set(topicName, topic);
+        return topic;
 
-        return new Promise((resolve, reject) => {
-            const topic = new Topic(name, userId, permissions);
-            this._topics = this._topics.set(name, topic);
-            return resolve(topic);
-        });
     }
 
     /**
@@ -160,13 +206,11 @@ export default class PubSub {
      * @param id
      * @param client
      */
-    addClient(id, client) {
-        if (!id) {
-            id = uuid();
-
+    addClient(client) {
+        if (!client.id) {
+            client.id = this.autoId();
         }
-
-        this._clients = this._clients.set(id, client);
+        this._clients = this._clients.set(client.id, client);
     }
 
     /**

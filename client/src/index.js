@@ -1,19 +1,23 @@
 import get from 'lodash.get';
 import Emitter from './emitter'
+import {TopicManager} from "./topic";
+
 
 export default class Connection {
+
     constructor(url) {
         this._url = url;
         this._event = new Emitter();
         this._connected = false;
         this._ws = null;
         this._timeout = null;
-
         this.connect = this.connect.bind(this);
 
         this._event.on('disconnect', () => {
             this.connect();
         });
+
+        this.topic = new TopicManager(this);
 
     }
 
@@ -23,21 +27,15 @@ export default class Connection {
 
             const ws = new WebSocket(this._url);
             this._ws = ws;
-
             ws.onopen = () => {
-
                 this._connected = true;
                 this._event.emit('connected', true);
-
                 resolve(this);
-
-
             };
 
-            ws.onmessage = (reponse) => {
+            ws.onmessage = (res) => {
 
-
-                let message = reponse.data;
+                let message = res.data;
 
                 if (typeof message === 'string') {
 
@@ -47,15 +45,27 @@ export default class Connection {
                     const payload = get(message, 'payload');
 
 
+                    console.log("Server message: ", message);
                     switch (action) {
 
                         case '__reply__':
-
 
                             this._event.emit(`__reply__${payload}`, true);
 
                             break;
 
+                        case 'topic_message':
+
+
+                            const topicName = get(payload, 'name');
+                            const topic = get(this.topic.topics, topicName, null);
+                            if (topic) {
+
+                                topic.send(get(payload, 'data'));
+                            }
+
+
+                            break;
 
                         default:
 
@@ -78,7 +88,6 @@ export default class Connection {
                 this._event.emit('disconnect', true);
 
                 this._connected = false;
-
                 reject("Connection Close");
             };
 
@@ -86,6 +95,7 @@ export default class Connection {
         })
 
     }
+
 
     /**
      * Listen event
@@ -112,12 +122,15 @@ export default class Connection {
      * @param name
      * @returns {*}
      */
-    createTopic(name) {
+    createTopic(name, permissions = []) {
 
         return this.send({
             id: this.autoId(),
             action: 'topic',
-            payload: name,
+            payload: {
+                name: name,
+                permissions: permissions
+            },
         });
 
     }
@@ -127,11 +140,17 @@ export default class Connection {
      * @param message
      */
     send(message) {
+
+
         return new Promise((resolve, reject) => {
             if (this._connected) {
 
                 let delivery = false;
 
+
+                if (!message.id) {
+                    message.id = this.autoId();
+                }
 
                 this._ws.send(JSON.stringify(message));
 
@@ -140,9 +159,7 @@ export default class Connection {
                     return resolve(data);
                 };
 
-                if (!message.id) {
-                    message.id = this.autoId();
-                }
+
                 const key = `__reply__${get(message, 'id')}`;
 
                 this.on(key, cb);
@@ -185,7 +202,7 @@ export default class Connection {
      * @returns {string}
      */
     autoId() {
-        return Math.random().toString(36).substr(2, 5);
+        return Math.random().toString(36).substr(2, 10);
     }
 }
 
@@ -203,9 +220,24 @@ window.onload = (function () {
 
     conn.on('connected', () => {
         console.log("you are connected");
-        conn.createTopic('toan').then(() => {
-            console.log("Your topic has created");
+
+        conn.topic.create({name: 'toan', permissions: []}).then((topic) => {
+            console.log("Topic created", topic);
+
+            // send some data
+
+            topic.subscribe((data) => {
+                console.log("Got data from topic", topic, data);
+            });
+
+            topic.publish({hi: "there, how are you?"});
+
+
+        }).catch(err => {
+
+            console.log("Anable create topic");
         });
+
     })
 
 

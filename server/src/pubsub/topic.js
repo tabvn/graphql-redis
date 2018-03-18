@@ -1,4 +1,6 @@
 import _ from 'lodash'
+import {Map} from 'immutable'
+
 
 /**
  * Permissions = [
@@ -14,14 +16,63 @@ import _ from 'lodash'
  }
  ]
  */
+
+
+
+
 export default class Topic {
 
-    constructor(name, userId = null, permissions = []) {
-        this.name = name;
-        this.userId = userId;
-        this.permissions = permissions ? permissions : [{}];
+    constructor(params, client = null) {
+
+
+        console.log("New topic has been created", params);
+
+
+        this.name = _.get(params, 'name');
+        this.user = _.get(client, 'user', null);
+        this.permissions = _.get(params, 'permissions', []);
+        this._subscribers = new Map();
 
         this.checkAccess = this.checkAccess.bind(this);
+        this.subscribe = this.subscribe.bind(this);
+        this.unsubscribe = this.subscribe.bind(this);
+        this.publish = this.publish.bind(this);
+
+
+    }
+
+    /**
+     * Client subscribe topics
+     * @param client
+     */
+    subscribe(client) {
+        this._subscribers = this._subscribers.set(client.id, client);
+    }
+
+    /**
+     * Client unsubscribe topic
+     * @param client
+     */
+    unsubscribe(client) {
+
+        this._subscribers = this._subscribers.remove(client.id);
+    }
+
+    /**
+     * Publish message to topic
+     * @param message
+     */
+    publish(message) {
+        // Loop and send message to each subscriber
+        this._subscribers.forEach((client, id) => {
+            client.send({
+                action: 'topic_message',
+                payload: {
+                    name: this.name,
+                    data: message
+                }
+            });
+        });
     }
 
     /**
@@ -37,8 +88,7 @@ export default class Topic {
             userRoles.push('everyone');
         }
 
-        let allowAccess = this.permissions.length ? false : true;
-
+        let allowAccess = !this.permissions.length;
         _.each(this.permissions, (perm) => {
 
             const isAllow = _.get(perm, 'allow', false);
