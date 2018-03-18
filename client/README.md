@@ -17,7 +17,7 @@ npm run build
 
 ## Idea
 
-```
+```javascript
   const connection = new Connection('ws://localhost:3001/');
     
     connection.connect().then(() => {
