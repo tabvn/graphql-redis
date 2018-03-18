@@ -212,33 +212,33 @@ export default class Connection {
 window.onload = (function () {
 
     const conn = new Connection('ws://localhost:3001/');
+
     conn.connect().then(() => {
-        console.log("Client is connected");
-    }).catch(err => {
-        console.log("An error connecting", err);
-    });
+        console.log("You are connected to the server.");
 
-    conn.on('connected', () => {
-        console.log("you are connected");
+        const Topic = conn.topic;
 
-        conn.topic.create({name: 'toan', permissions: []}).then((topic) => {
+        // let create new Topic
+        Topic.create({name: 'toan', permissions: []}).then((topic) => {
             console.log("Topic created", topic);
 
-            // send some data
-
+            // let subscribe to this topic for next incomming messages
             topic.subscribe((data) => {
-                console.log("Got data from topic", topic, data);
+                console.log("Got message from topic", data);
             });
 
+            // let publish sample message data
             topic.publish({hi: "there, how are you?"});
 
 
         }).catch(err => {
-
-            console.log("Anable create topic");
+            console.log("An error create topic", err);
         });
 
-    })
+
+    }).catch(err => {
+        console.log("An error connecting", err);
+    });
 
 
 });
