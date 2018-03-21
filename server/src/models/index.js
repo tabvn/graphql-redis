@@ -182,7 +182,7 @@ export default class Model {
             model.id = id;
 
 
-            if (!changed) {
+            if (!isNew && !changed) {
                 // we dont do anything. because no thing change.
                 return resolve(model);
             }
