@@ -4,7 +4,7 @@ import Email from '../types/email'
 import DateTime from '../types/datetime'
 import Role from '../types/role'
 import bcrypt from 'bcrypt'
-import {SEP} from "../types/role";
+import {SEP, strToArray} from "../types/role";
 import _ from 'lodash'
 
 export default class User extends Model {
@@ -25,7 +25,7 @@ export default class User extends Model {
         if (model) {
 
             if (_.get(model, 'roles')) {
-                model.roles = _.split(_.get(model, 'roles'), SEP);
+                model.roles = strToArray(_.get(model, 'roles'));
             } else {
                 model.roles = [];
             }
@@ -53,10 +53,9 @@ export default class User extends Model {
             model = await super.validate(id, model);
         }
         catch (err) {
-            err.push(err);
+            console.log(err);
+            error = _.concat(error, err);
         }
-
-
         return new Promise((resolve, reject) => {
             if (error.length) {
                 return reject(error);
@@ -70,7 +69,8 @@ export default class User extends Model {
             });
 
             const uRoles = _.get(model, 'roles', []);
-            let userRoles = _.split(uRoles, SEP);
+            let userRoles = strToArray(uRoles);
+
 
             if (Array.isArray(_.get(model, 'roles'))) {
                 userRoles = uRoles;
@@ -290,10 +290,10 @@ export default class User extends Model {
                 minLength: 3,
             },
             firstName: {
-                type: GraphQLNonNull(GraphQLString)
+                type: GraphQLString
             },
             lastName: {
-                type: GraphQLNonNull(GraphQLString)
+                type: GraphQLString
             },
             created: {
                 type: DateTime,
